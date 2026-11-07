@@ -1,6 +1,6 @@
 # Calgary Dash
 
-3-day Calgary weather (°F) and a CAD ⇄ USD converter, as an installable web app.
+3-day weather (°F) for Calgary or Banff (tap to switch) and a CAD ⇄ USD converter, as an installable web app.
 
 **Open:** https://johnvv999.github.io/calgary-dash/
 

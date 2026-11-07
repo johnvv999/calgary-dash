@@ -59,13 +59,25 @@
   .out { flex: 1; min-width: 0; font-size: 20px; font-weight: 600; white-space: nowrap; }
   .info { font-size: 13px; color: var(--muted); white-space: pre-line; }
   .center { display: flex; justify-content: center; align-items: center; height: 150px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .seg { display: flex; background: var(--tile); border-radius: 10px; padding: 3px; flex: none; }
+  .seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 15px;
+                padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600;
+                                     box-shadow: 0 1px 3px rgba(0,0,0,.15); }
   button.retry { background: none; border: 0; color: var(--lo); font-size: 16px; padding: 12px 0; }
 </style>
 </head>
 <body>
 <main>
   <section class="card">
-    <h1>Calgary, AB</h1>
+    <div class="head">
+      <h1 id="place">Calgary, AB</h1>
+      <div class="seg" role="group" aria-label="Location">
+        <button data-city="calgary" aria-pressed="true">Calgary</button>
+        <button data-city="banff" aria-pressed="false">Banff</button>
+      </div>
+    </div>
     <div class="muted">3-day forecast</div>
     <div id="weather"><div class="center muted">Loading…</div></div>
   </section>
@@ -134,15 +146,34 @@ function skyFor(code) {
   return 'cloudy';
 }
 
+const CITIES = {
+  calgary: { name: 'Calgary, AB', lat: 51.0447, lon: -114.0719 },
+  banff:   { name: 'Banff, AB',   lat: 51.1784, lon: -115.5708 },
+};
+let city = 'calgary';
+try { const c = localStorage.getItem('city'); if (CITIES[c]) city = c; } catch {}
+function setCity(c) {
+  city = c;
+  try { localStorage.setItem('city', c); } catch {}
+  document.getElementById('place').textContent = CITIES[c].name;
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.city === c));
+  loadWeather();
+}
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { if (b.dataset.city !== city) setCity(b.dataset.city); }));
+
+let weatherReq = 0;
 async function loadWeather() {
   const el = document.getElementById('weather');
+  const req = ++weatherReq;
   el.innerHTML = '<div class="center muted">Loading…</div>';
   try {
-    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=51.0447&longitude=-114.0719' +
+    const { lat, lon } = CITIES[city];
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       '&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit' +
       '&timezone=America%2FEdmonton&forecast_days=3');
     if (!r.ok) throw new Error(r.status);
     const d = (await r.json()).daily;
+    if (req !== weatherReq) return; // a newer request (city switch) superseded this one
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
     el.innerHTML = '<div class="days">' + d.time.map((iso, i) => {
       const dt = new Date(iso + 'T12:00:00');
@@ -156,6 +187,7 @@ async function loadWeather() {
         <div class="temp lo">L ${Math.round(d.temperature_2m_min[i])}°F</div></div>`;
     }).join('') + '</div>';
   } catch (e) {
+    if (req !== weatherReq) return;
     el.innerHTML = '<button class="retry" onclick="loadWeather()">Couldn\'t load weather. Tap to retry.</button>';
   }
 }
@@ -212,7 +244,7 @@ async function loadRate() {
   }
 }
 
-loadWeather();
+setCity(city);
 loadRate();
 // Refresh when reopened from the home screen after being in the background.
 document.addEventListener('visibilitychange', () => {

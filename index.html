@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calgary Dash</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Calgary Dash">
+<meta name="theme-color" content="#f4f4f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root {
+    --bg: #f4f4f7; --card: #ffffff; --tile: #eceef3; --text: #1c1b1f; --muted: #5f6370;
+    --border: #c9ccd4; --hi: #d9534f; --lo: #3a7bd5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141218; --card: #2b2930; --tile: #3a3841; --text: #e6e1e5; --muted: #b5b0bc;
+            --border: #6b6873; --hi: #ef6b66; --lo: #5b9cf0; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main {
+    min-height: 100%; display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
+    padding: calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 16px)
+             calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px);
+    max-width: 560px; margin: 0 auto;
+  }
+  .card { background: var(--card); border-radius: 20px; padding: 18px; }
+  h1 { margin: 0; font-size: 24px; }
+  h2 { margin: 0 0 14px; font-size: 21px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .days { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .day { background: var(--tile); border-radius: 14px; padding: 12px 4px; text-align: center; }
+  .day b { font-size: 17px; }
+  .day .date { font-size: 13px; color: var(--muted); }
+  .day svg { width: 60px; height: 60px; margin: 6px auto 2px; display: block; }
+  .day .sky { font-size: 13px; }
+  .temp { font-weight: 600; font-size: 17px; }
+  .hi { color: var(--hi); margin-top: 6px; } .lo { color: var(--lo); }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .row svg.flag { width: 42px; height: 42px; flex: none; }
+  .field { flex: 1; min-width: 0; display: flex; align-items: center; border: 1.5px solid var(--border);
+           border-radius: 10px; padding: 0 12px; height: 54px; }
+  .field:focus-within { border-color: var(--lo); }
+  .field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text);
+                 font-size: 20px; outline: none; }
+  .field span { color: var(--muted); font-size: 18px; }
+  .eq { font-size: 20px; }
+  .out { flex: 1; min-width: 0; font-size: 20px; font-weight: 600; white-space: nowrap; }
+  .info { font-size: 13px; color: var(--muted); white-space: pre-line; }
+  .center { display: flex; justify-content: center; align-items: center; height: 150px; }
+  button.retry { background: none; border: 0; color: var(--lo); font-size: 16px; padding: 12px 0; }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>Calgary, AB</h1>
+    <div class="muted">3-day forecast</div>
+    <div id="weather"><div class="center muted">Loading…</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Currency exchange</h2>
+    <div class="row">
+      <svg class="flag" viewBox="0 0 100 100" aria-label="Canada"><path fill="#D80621" d="M50,2 L58,17 L66,13 L62,40 L74,26 L78,34 L93,31 L88,46 L97,50 L74,66 L78,75 L53,70 L54,97 L46,97 L47,70 L22,75 L26,66 L3,50 L12,46 L7,31 L22,34 L26,26 L38,40 L34,13 L42,17 Z"/></svg>
+      <label class="field"><input id="cad" inputmode="decimal" value="1" autocomplete="off"><span>CAD</span></label>
+      <span class="eq">=</span>
+      <span class="out" id="cadOut">— USD</span>
+    </div>
+    <div class="row">
+      <svg class="flag" viewBox="0 0 190 100" aria-label="United States" id="usflag"></svg>
+      <label class="field"><input id="usd" inputmode="decimal" value="1" autocomplete="off"><span>USD</span></label>
+      <span class="eq">=</span>
+      <span class="out" id="usdOut">— CAD</span>
+    </div>
+    <div class="info" id="fxInfo">Loading today's rate…</div>
+  </section>
+</main>
+
+<script>
+// ---------- US flag ----------
+(() => {
+  const s = [];
+  for (let i = 0; i < 13; i++) s.push(`<rect y="${i * 100 / 13}" width="190" height="${100 / 13 + 0.2}" fill="${i % 2 ? '#fff' : '#B22234'}"/>`);
+  const ch = 700 / 13;
+  s.push(`<rect width="76" height="${ch}" fill="#3C3B6E"/>`);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++)
+    s.push(`<circle cx="${76 * (c + 0.5) / 5}" cy="${ch * (r + 0.5) / 4}" r="2.6" fill="#fff"/>`);
+  s.push(`<rect width="190" height="100" fill="none" stroke="rgba(0,0,0,.2)"/>`);
+  const svg = document.getElementById('usflag');
+  svg.setAttribute('viewBox', '0 -45 190 190');
+  svg.innerHTML = s.join('');
+})();
+
+// ---------- Weather ----------
+const SUN = '#FFB300', CLOUD = '#9EA7B3', RAIN = '#2F80ED';
+const cloud = (dy = 0, col = CLOUD) =>
+  `<g fill="${col}" transform="translate(0 ${dy})"><circle cx="33" cy="58" r="15"/><circle cx="52" cy="48" r="20"/><circle cx="70" cy="58" r="14"/><rect x="18" y="56" width="66" height="16" rx="8"/></g>`;
+const sun = (cx, cy, r) => {
+  let g = '';
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    g += `<line x1="${cx + r * 1.35 * Math.cos(a)}" y1="${cy + r * 1.35 * Math.sin(a)}" x2="${cx + r * 1.8 * Math.cos(a)}" y2="${cy + r * 1.8 * Math.sin(a)}" stroke="${SUN}" stroke-width="${r * .28}" stroke-linecap="round"/>`;
+  }
+  return g + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${SUN}"/>`;
+};
+const ICONS = {
+  sunny: sun(50, 50, 22),
+  partly: sun(36, 36, 16) + cloud(8),
+  cloudy: cloud(),
+  rain: cloud(-10) + [32, 50, 68].map(x => `<line x1="${x}" y1="68" x2="${x - 6}" y2="90" stroke="${RAIN}" stroke-width="6" stroke-linecap="round"/>`).join(''),
+  snow: cloud(-10) + [[30, 76], [50, 86], [70, 76]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" fill="#7FB8F0"/>`).join(''),
+  storm: cloud(-10, '#6B7380') + `<path d="M52 60 L38 80 L50 80 L42 98 L64 72 L52 72 L60 60 Z" fill="${SUN}"/>`,
+};
+const LABELS = { sunny: 'Sunny', partly: 'Partly cloudy', cloudy: 'Cloudy', rain: 'Rain', snow: 'Snow', storm: 'Storm' };
+function skyFor(code) {
+  if (code <= 1) return 'sunny';
+  if (code === 2) return 'partly';
+  if (code === 3 || code === 45 || code === 48) return 'cloudy';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+  if (code >= 95) return 'storm';
+  return 'cloudy';
+}
+
+async function loadWeather() {
+  const el = document.getElementById('weather');
+  el.innerHTML = '<div class="center muted">Loading…</div>';
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=51.0447&longitude=-114.0719' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit' +
+      '&timezone=America%2FEdmonton&forecast_days=3');
+    if (!r.ok) throw new Error(r.status);
+    const d = (await r.json()).daily;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+    el.innerHTML = '<div class="days">' + d.time.map((iso, i) => {
+      const dt = new Date(iso + 'T12:00:00');
+      const label = iso === today ? 'Today' : dt.toLocaleDateString(undefined, { weekday: 'short' });
+      const sub = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const sky = skyFor(d.weather_code[i]);
+      return `<div class="day"><b>${label}</b><div class="date">${sub}</div>
+        <svg viewBox="0 0 100 100" aria-hidden="true">${ICONS[sky]}</svg>
+        <div class="sky">${LABELS[sky]}</div>
+        <div class="temp hi">H ${Math.round(d.temperature_2m_max[i])}°F</div>
+        <div class="temp lo">L ${Math.round(d.temperature_2m_min[i])}°F</div></div>`;
+    }).join('') + '</div>';
+  } catch (e) {
+    el.innerHTML = '<button class="retry" onclick="loadWeather()">Couldn\'t load weather. Tap to retry.</button>';
+  }
+}
+
+// ---------- Currency (looked up at most once per day) ----------
+let rate = null;
+const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function readCache() { try { return JSON.parse(localStorage.getItem('fx') || 'null'); } catch { return null; } }
+function writeCache(v) { try { localStorage.setItem('fx', JSON.stringify(v)); } catch {} }
+
+async function getDailyRate() {
+  const today = localDay();
+  const cached = readCache();
+  if (cached && cached.fetchedOn === today) return cached;
+  try {
+    let fresh;
+    try {
+      const j = await (await fetch('https://api.frankfurter.dev/v1/latest?base=CAD&symbols=USD')).json();
+      fresh = { cadToUsd: j.rates.USD, rateDate: j.date, fetchedOn: today };
+    } catch {
+      const j = await (await fetch('https://open.er-api.com/v6/latest/CAD')).json();
+      fresh = { cadToUsd: j.rates.USD, rateDate: today, fetchedOn: today };
+    }
+    if (!(fresh.cadToUsd > 0)) throw new Error('bad rate');
+    writeCache(fresh);
+    return fresh;
+  } catch (e) {
+    if (cached) return cached;
+    throw e;
+  }
+}
+
+const $ = id => document.getElementById(id);
+const amt = s => { const v = parseFloat(s.replace(/,/g, '').trim()); return isNaN(v) ? null : v; };
+const fmt = v => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function render() {
+  if (!rate) return;
+  const c = amt($('cad').value), u = amt($('usd').value);
+  $('cadOut').textContent = (c == null ? '—' : fmt(c * rate.cadToUsd)) + ' USD';
+  $('usdOut').textContent = (u == null ? '—' : fmt(u / rate.cadToUsd)) + ' CAD';
+}
+for (const id of ['cad', 'usd']) $(id).addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/[^0-9.,]/g, '');
+  render();
+});
+
+async function loadRate() {
+  try {
+    rate = await getDailyRate();
+    $('fxInfo').textContent = `1 CAD = ${rate.cadToUsd.toFixed(4)} USD  •  1 USD = ${(1 / rate.cadToUsd).toFixed(4)} CAD\nRate date: ${rate.rateDate}`;
+    render();
+  } catch {
+    $('fxInfo').textContent = "Couldn't load exchange rate (no connection?)";
+  }
+}
+
+loadWeather();
+loadRate();
+// Refresh when reopened from the home screen after being in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { loadWeather(); loadRate(); }
+});
+</script>
+</body>
+</html>
